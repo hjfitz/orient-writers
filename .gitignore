@@ -1,0 +1,18 @@
+# Allow-list: nothing is tracked unless named here. ~/.claude holds credentials,
+# transcripts and caches, so a new path must be added deliberately.
+/*
+!/.gitignore
+!/.githooks/
+!/README.md
+!/skills/
+!/waypoint/
+!/customers/
+!/hooks/
+!/statusline/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.trash/
+# Claude Code writes account-managed skills here; never ours to track.
+/skills/synced/

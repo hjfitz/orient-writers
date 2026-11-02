@@ -1,0 +1,24 @@
+# {{service}} — Waypoint index. Cheap orientation only, never documentation.
+# Every value is a fact, a path, or a command — never a sentence. Anything needing a sentence
+# belongs in a doc. (No line cap: the old ~25-line one was exceeded by 22 of 26 files.)
+service: {{service}}
+type: backend            # backend | frontend | library | infra
+owner: bifrost
+language:
+framework:
+deploy:                  # cloud-run | vercel | vm | n/a
+observability:           # datadog | none
+
+interfaces:
+  inbound: []            # http, pubsub, cron, sftp, webhook, cli
+  outbound: []           # service/system names
+
+key_paths: []            # 3-6 entrypoints worth knowing: src/http, iac/, apps/api/cmd
+
+# note: >          # optional. Durable orientation only — the thing that surprises someone
+#                  # arriving cold. NEVER machine state (branch, commits behind, dirty files)
+#                  # and never a dated snapshot: nothing here is staleness-checked, so an
+#                  # expiring claim rots invisibly. Point at the Bifrost/ vault for a
+#                  # programme rather than restating it.
+
+onboarded: {{date}}

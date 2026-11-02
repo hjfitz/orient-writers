@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Block a commit that stages a secret. gitleaks is required; failing closed is the point.
+set -euo pipefail
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "pre-commit: gitleaks not installed; refusing to commit unscanned changes" >&2
+  exit 1
+fi
+exec gitleaks protect --staged --redact --no-banner
