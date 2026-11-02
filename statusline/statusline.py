@@ -167,7 +167,7 @@ def sessions_dir():
 
 
 # Usage history is a durable record that syncs with the vault: one directory per machine and one file
-# per month (matches orient's config.ts recordsDir/hostId), so each file has a single writer.
+# per day, so a sync commits a small file rather than a growing month (matches orient's config.ts recordsDir/hostId), so each file has a single writer.
 def records_dir():
     base = os.environ.get("ORIENT_RECORDS_DIR")
     if not base:
@@ -215,8 +215,8 @@ def append_history(snapshot):
             "cost_usd": cost,
             "ts": snapshot["updated_at"],
         }
-        month = time.strftime("%Y-%m", time.gmtime(row["ts"]))
-        with open(os.path.join(d, f"usage-history-{month}.jsonl"), "a") as f:
+        day = time.strftime("%Y-%m-%d", time.gmtime(row["ts"]))
+        with open(os.path.join(d, f"usage-history-{day}.jsonl"), "a") as f:
             f.write(json.dumps(row) + "\n")
     except Exception:
         pass
