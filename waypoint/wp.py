@@ -72,12 +72,27 @@ def warn(msg):
     print("wp: %s" % msg, file=sys.stderr)
 
 
-# orient's state dir (matches statusline.py and orient's own config.ts) — the shared append-only
-# location for cross-tool usage data, outside the vault since it's disposable app state, not
-# engineering truth.
-def orient_state_dir():
-    return Path(os.environ.get("ORIENT_STATE_DIR") or
-                (Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "orient"))
+# Durable records sync with the vault, one directory per machine so each file has one writer and git
+# never merges it (matches orient's config.ts recordsDir/hostId). The machine id is a file, not env,
+# because this runs under Claude Code rather than orient's units.
+HOST_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,31}$")
+
+
+def orient_host_id():
+    try:
+        p = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "orient" / "host"
+        hid = p.read_text().strip()
+        if HOST_ID.match(hid):
+            return hid
+    except OSError:
+        pass
+    return "laptop"
+
+
+def orient_records_dir():
+    base = os.environ.get("ORIENT_RECORDS_DIR")
+    root = Path(base) if base else VAULT / ".knowledge" / "records"
+    return root / orient_host_id()
 
 
 # Appends one row per tick to plan-usage.jsonl: which session/effort actually did the work,
@@ -86,7 +101,7 @@ def orient_state_dir():
 # actual on the Usage page. Fully guarded — a write failure never blocks the tick itself.
 def record_plan_usage(service, plan_stem, increment, fm):
     try:
-        d = orient_state_dir()
+        d = orient_records_dir()
         d.mkdir(parents=True, exist_ok=True)
         row = {
             "ts": int(dt.datetime.now().timestamp()),
@@ -112,7 +127,7 @@ PR_REF = re.compile(r"\b([A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*#\
 
 def record_work_usage(kind, **fields):
     try:
-        d = orient_state_dir()
+        d = orient_records_dir()
         d.mkdir(parents=True, exist_ok=True)
         row = {"ts": int(dt.datetime.now().timestamp()), "kind": kind,
                "session_id": os.environ.get("CLAUDE_CODE_SESSION_ID")}

@@ -7,6 +7,7 @@ and CPU from /proc. Every facet degrades to '—' on error and the script never
 raises, so a bad read can never block the TUI.
 """
 import json
+import re
 import os
 import sys
 import time
@@ -165,6 +166,25 @@ def sessions_dir():
     return os.path.join(state_dir(), "sessions")
 
 
+# Usage history is a durable record that syncs with the vault: one directory per machine and one file
+# per month (matches orient's config.ts recordsDir/hostId), so each file has a single writer.
+def records_dir():
+    base = os.environ.get("ORIENT_RECORDS_DIR")
+    if not base:
+        vault = os.environ.get("ORIENT_VAULT") or os.environ.get("WAYPOINT_VAULT") or os.path.expanduser("~/Documents/obsidian")
+        base = os.path.join(vault, ".knowledge", "records")
+    host = "laptop"
+    try:
+        config = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        with open(os.path.join(config, "orient", "host")) as f:
+            candidate = f.read().strip()
+        if re.match(r"^[a-z0-9][a-z0-9-]{0,31}$", candidate):
+            host = candidate
+    except OSError:
+        pass
+    return os.path.join(base, host)
+
+
 # Read the previous snapshot's cost, if any, so persist() can tell whether cost actually moved
 # before deciding to append a history row. A missing/unreadable file just means "no prior cost".
 def prev_cost_usd(path):
@@ -187,7 +207,7 @@ def append_history(snapshot):
         path = os.path.join(sessions_dir(), f"{snapshot['session_id']}.json")
         if cost == prev_cost_usd(path):
             return
-        d = state_dir()
+        d = records_dir()
         os.makedirs(d, exist_ok=True)
         row = {
             "session_id": snapshot["session_id"],
@@ -195,7 +215,8 @@ def append_history(snapshot):
             "cost_usd": cost,
             "ts": snapshot["updated_at"],
         }
-        with open(os.path.join(d, "usage-history.jsonl"), "a") as f:
+        month = time.strftime("%Y-%m", time.gmtime(row["ts"]))
+        with open(os.path.join(d, f"usage-history-{month}.jsonl"), "a") as f:
             f.write(json.dumps(row) + "\n")
     except Exception:
         pass
