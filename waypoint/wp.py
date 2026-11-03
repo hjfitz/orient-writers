@@ -9,6 +9,7 @@ gating findings · 3 `stale` found a doc behind its anchor.
 """
 
 import argparse
+import atexit
 import datetime as dt
 import json
 import os
@@ -138,6 +139,32 @@ def record_work_usage(kind, **fields):
         pass
 
 
+# ----------------------------------------------------------------- vault sync
+
+# The vault syncs between machines through git (orient's scripts/vault-sync.sh, on PATH as
+# orient-vault-sync). A command that rewrites a file pulls first so it edits the newest copy, and any
+# write kicks a sync so it reaches the other machines in seconds rather than on the next timer run.
+# Both are best effort: offline, or with no sync installed, the command runs exactly as before.
+VAULT_SYNC = Path.home() / ".local/bin/orient-vault-sync"
+_WROTE = False
+
+
+def vault_sync(mode, timeout):
+    if not (VAULT / ".git").exists() or not VAULT_SYNC.exists():
+        return
+    env = dict(os.environ, ORIENT_VAULT=str(VAULT), ORIENT_SYNC_NET_TIMEOUT="8")
+    try:
+        subprocess.run([str(VAULT_SYNC), mode], env=env, timeout=timeout, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def kick_vault_sync():
+    if _WROTE:
+        vault_sync("kick", 10)
+
+
 # ------------------------------------------------------------------ safe i/o
 
 _READ_MTIME = {}   # resolved path -> st_mtime_ns when this process last read it
@@ -146,6 +173,8 @@ _READ_MTIME = {}   # resolved path -> st_mtime_ns when this process last read it
 def atomic_write(path: Path, text: str):
     """Same-directory temp file + os.replace, so a reader never sees a half-written file and a
     crash mid-write cannot truncate one. Replaces the mtime this process remembers for the path."""
+    global _WROTE
+    _WROTE = True
     fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".wp-", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as fh:
@@ -3182,7 +3211,15 @@ def main():
     p.set_defaults(fn=cmd_sync)
 
     a = ap.parse_args()
+    if a.fn in REWRITES and not getattr(a, "dry_run", False):
+        vault_sync("pull", 45)
+    atexit.register(kick_vault_sync)
     a.fn(a)
+
+
+# Commands that read a vault file and write it back: they pull first.
+REWRITES = {cmd_tick, cmd_plan_status, cmd_plan_set_model, cmd_add_section, cmd_programme_tick,
+            cmd_programme_set_model, cmd_decide, cmd_handback, cmd_verify, cmd_sync, cmd_index}
 
 
 if __name__ == "__main__":

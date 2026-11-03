@@ -14,6 +14,7 @@ import argparse
 import datetime as dt
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 import os
@@ -30,6 +31,22 @@ TODAY = dt.date.today().isoformat()
 def die(msg, code=1):
     print("cust: %s" % msg, file=sys.stderr)
     sys.exit(code)
+
+
+# The vault syncs between machines through git (orient's scripts/vault-sync.sh, on PATH as
+# orient-vault-sync); see wp.py's vault_sync. Best effort: offline or not installed, nothing changes.
+VAULT_SYNC = Path.home() / ".local/bin/orient-vault-sync"
+
+
+def vault_sync(mode, timeout):
+    if not (VAULT / ".git").exists() or not VAULT_SYNC.exists():
+        return
+    env = dict(os.environ, ORIENT_VAULT=str(VAULT), ORIENT_SYNC_NET_TIMEOUT="8")
+    try:
+        subprocess.run([str(VAULT_SYNC), mode], env=env, timeout=timeout, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 
 FM = re.compile(r"\A---\n(.*?)\n---\n?(.*)\Z", re.S)
@@ -359,7 +376,19 @@ def main():
     p.set_defaults(fn=cmd_index)
 
     a = ap.parse_args()
-    a.fn(a)
+    dry = getattr(a, "dry_run", False)
+    if a.fn in REWRITES and not dry:
+        vault_sync("pull", 45)
+    try:
+        a.fn(a)
+    finally:
+        if a.fn in WRITES and not dry:
+            vault_sync("kick", 10)
+
+
+# Commands that write the vault kick a sync; the ones that read a file and write it back pull first.
+WRITES = {cmd_init, cmd_ledger, cmd_synced, cmd_sync, cmd_index}
+REWRITES = {cmd_synced, cmd_sync, cmd_index}
 
 
 if __name__ == "__main__":
