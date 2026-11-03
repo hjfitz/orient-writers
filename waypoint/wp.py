@@ -2337,6 +2337,8 @@ def cmd_tick(a):
     if inc is None:
         die("%s has no ## Increments section" % f.name)
     want = str(a.increment).rstrip(".")
+    # The template's guidance comment carries an example increment; never tick that.
+    inc = COMMENT_RE.sub(lambda c: "\n" * c.group(0).count("\n"), inc)
     hit = None
     for line in inc.splitlines():
         m = re.match(r"^\s*[-*] \[([ xX])\]\s*([A-Za-z]*\d+[a-z]?)\.", line)
