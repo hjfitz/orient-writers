@@ -16,9 +16,11 @@
 //
 // Dependency-free and standalone so a skill can call it without orient's toolchain. It mirrors
 // orient's src/render/md/explainer-blocks.ts rather than importing it (that file is TypeScript behind
-// a bundler); the two change together, so a new block field goes in both.
+// a bundler); the two change together, so a new block field goes in both. The preset and diagram rules
+// live in diagram-rules.mjs beside this file, which the diagram audit (audit-diagrams.mjs) shares.
 
 import { readFileSync } from 'node:fs'
+import { checkFlow, checkMermaid, checkSequence, NODE_KINDS } from './diagram-rules.mjs'
 
 const args = process.argv.slice(2)
 const modeAt = args.indexOf('--mode')
@@ -46,7 +48,6 @@ const NEEDS_SHA = ANCHORED && file.includes('/Engineering/')
 
 const CONFIDENCES = new Set(['high', 'moderate', 'low'])
 const EVIDENCE_KINDS = new Set(['code', 'pr', 'ticket', 'log', 'doc', 'url'])
-const NODE_KINDS = new Set(['service', 'topic', 'store', 'step', 'external'])
 const TONES = new Set(['alert', 'accent'])
 const STEP_KINDS = new Set(['call', 'return', 'async'])
 const CODE_REF = /^(.+?)@([0-9a-fA-F]{7,40})(?::(L\d+(?:-L?\d+)?))?$/
@@ -153,12 +154,13 @@ for (const b of blocks.filter((x) => x.lang.startsWith('orient-'))) {
       if (!nonEmpty(n.id) || !nonEmpty(n.label)) add(b.start, 'error', `orient-flow: nodes.${i} needs an id and a label`)
       if (ids.has(n.id)) add(b.start, 'error', `orient-flow: duplicate node id "${n.id}"`)
       ids.add(n.id)
-      if (n.kind !== undefined && !NODE_KINDS.has(n.kind)) add(b.start, 'error', `orient-flow: nodes.${i}.kind "${n.kind}" is not one of ${[...NODE_KINDS].join(', ')}`)
+      if (n.kind !== undefined && !NODE_KINDS.includes(n.kind)) add(b.start, 'error', `orient-flow: nodes.${i}.kind "${n.kind}" is not one of ${NODE_KINDS.join(', ')}`)
       if (n.tone != null && !TONES.has(n.tone)) add(b.start, 'error', `orient-flow: nodes.${i}.tone must be alert or accent`)
     }
     for (const [i, e] of (data.edges ?? []).entries()) {
       for (const end of ['from', 'to']) if (!ids.has(e[end])) add(b.start, 'error', `orient-flow: edges.${i}.${end} names unknown node "${e[end]}"`)
     }
+    for (const f of checkFlow(data, { anchored: ANCHORED })) add(b.start, f.level, f.message)
   } else if (kind === 'orient-sequence') {
     const ids = new Set()
     if (!Array.isArray(data.actors) || data.actors.length < 2 || data.actors.length > 8) add(b.start, 'error', 'orient-sequence: actors must have 2 to 8 entries')
@@ -168,6 +170,7 @@ for (const b of blocks.filter((x) => x.lang.startsWith('orient-'))) {
       if (!nonEmpty(s.label)) add(b.start, 'error', `orient-sequence: steps.${i}.label is required`)
       if (s.kind !== undefined && !STEP_KINDS.has(s.kind)) add(b.start, 'error', `orient-sequence: steps.${i}.kind must be call, return or async`)
     }
+    for (const f of checkSequence(data, { anchored: ANCHORED })) add(b.start, f.level, f.message)
   } else {
     add(b.start, 'warn', `${kind}: unknown orient block kind (orient will show it as source)`)
   }
@@ -230,7 +233,10 @@ for (const want of mode === 'blocks' ? [] : expected) {
 }
 
 // diagrams: orient draws the structure itself, so mermaid and a flow-less overview or architecture are findings
-for (const b of blocks.filter((x) => x.lang === 'mermaid')) add(b.start, 'warn', 'mermaid: redraw it as orient-flow so it matches the rest of the page')
+for (const b of blocks.filter((x) => x.lang === 'mermaid')) {
+  const m = checkMermaid(b.body.join('\n'))
+  add(b.start, 'warn', `mermaid ${m.type}: ${m.hint}${m.target ? ' so it matches the rest of the page' : ''}`)
+}
 if ((mode === 'overview' || mode === 'architecture') && NEEDS_SHA && !(parsed['orient-flow'] ?? []).length) {
   add(1, 'warn', `${mode} has no orient-flow: draw the ${mode === 'overview' ? "service's neighbours" : 'structure'}`)
 }

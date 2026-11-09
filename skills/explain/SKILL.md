@@ -128,21 +128,40 @@ Each is JSON in a fenced block, parsed as data. A bad block shows as a visible e
 
 Cite what you actually read, at the sha you read it. Use line ranges only when you read those lines.
 
-**`orient-flow`** — a diagram, when a structure or path is hard to hold in prose. At most 12 nodes in practice; one per page is normal. Fields: `title?`, `nodes[]` of `{ id, label, sub?, kind?, service?, tone?, ev? }`, `edges[]` of `{ from, to, label?, style? }`.
-- `kind`: `service | topic | store | step | external` (default `step`). Say something only when the kind matters.
+**`orient-flow`** — a diagram, when a structure or path is hard to hold in prose. At most 12 nodes in practice (20 for C4); one per page is normal. Fields: `title?`, `preset?`, `groups?`, `nodes[]` of `{ id, label, sub?, kind?, tech?, group?, icon?, unconfirmed?, service?, tone?, ev? }`, `edges[]` of `{ from, to, label?, style?, unconfirmed? }`.
+- `kind`: `service | topic | store | step | external | person` (default `step`). The kind sets the shape, so say it whenever it is true: a `store` is a cylinder, a `topic` or `person` a pill, an `external` a box on a darker fill. Blocks written before presets get the same shapes.
+- `sub`: the one-line description. `tech`: the product or technology, drawn on the top line (`Cloud Run`, `Pub/Sub topic`).
 - `service`: a repo name. Draws its identity colour and links to its Waypoint docs.
 - `tone`: `alert` marks the failure point, `accent` the point of the page.
 - `ev`: evidence ids that back the node.
+- `unconfirmed`: on a node or an edge, for something you could not verify. It is drawn dashed and marked "not confirmed". Never draw a guess as fact; a Waypoint doc (`overview.md`, `architecture.md`) should have none.
+- `icon`: one of `compute storage pubsub run memorystore gke sql bigquery functions secret scheduler`, drawn by orient as a small mark at the top-left of the box (or of a group's label). They are generic marks, not Google's product art; a `person` gets its mark without asking.
+- `groups[]` of `{ id, label, icon? }` and `node.group`: a box drawn round the nodes that share a boundary (a system, a container, a Cloud Run service). Flat only, no nesting. Keep external things outside every group.
 - A cycle is fine; its closing edge is drawn round the side.
-- Keep labels short (a few words) and put detail in the prose. Do not add a node a reader does not need.
+- Keep labels short (a few words) and put detail in the prose. Do not add a node a reader does not need. Every edge says what moves, not "uses".
 
-**`orient-sequence`** — for an order of calls between parties. `actors[]` (2 to 8) of `{ id, label, service? }`, `steps[]` of `{ from, to, label, kind?, note?, tone?, ev? }` with `kind` `call|return|async`. Steps are numbered on the page; cite "step 3" in prose.
+`preset` names the convention the diagram follows. Pick the one that fits; the lint measures the block against it.
 
-Do **not** write mermaid. Pick `orient-flow` for structure and branching, `orient-sequence` for ordered calls, a table for a chronology of more than five events, and a bullet list for fewer.
+| preset | Use for | Rules the lint holds it to |
+|---|---|---|
+| `c4-context` | The system, its people and the systems it touches (C4 level 1) | `person`, `service`, `external` only; no groups; 10 nodes; every box has a `sub` |
+| `c4-container` | What runs inside the system (C4 level 2) | Groups for system or deployment boundaries; 20 nodes; every box has a `sub`; dashed means `unconfirmed` |
+| `c4-component` | The parts of one container (C4 level 3) | The container is the one group; 20 nodes; topics, stores and externals sit outside it |
+| `data-flow` | A pipeline: what moves between stages | 12 nodes; edges are numbered 1, 2, 3 in the order you list them, so list them in flow order; a dashed edge means async |
+
+No `preset` still draws, and the lint names the one the block looks like. `v` stays `1`; a preset's own rules carry a version in orient's `diagram-presets.ts`.
+
+**`orient-sequence`** — for an order of calls between parties. `actors[]` (2 to 8) of `{ id, label, service?, kind?, unconfirmed? }`, `steps[]` of `{ from, to, label, kind?, note?, tone?, unconfirmed?, ev? }` with `kind` `call|return|async`. Steps are numbered on the page; cite "step 3" in prose. `preset: "c4-dynamic"` is for the numbered interaction between the boxes of one C4 diagram: give each actor a `kind` so its head matches the flow diagrams, at most 6 actors and 20 steps.
+
+**Lucid.** orient draws these itself, so a Waypoint doc or explainer never needs a Lucid diagram. The `c4-diagrams` skill makes the Lucid version, for a Confluence page or a diagram others will edit. Both follow the same conventions, which is why the presets use its levels and its `Not confirmed` rule. Draw one in Lucid and keep the `orient-flow` as its text twin, or the other way round; do not maintain two drawings of the same thing by hand.
+
+Do **not** write mermaid. Pick `orient-flow` (with a preset) for structure and branching, `orient-sequence` for ordered calls, a table for a chronology of more than five events, and a bullet list for fewer.
 
 ## Step 5 — Lint, then save
 
-Run `LINT` on the file. **Errors are blocking**: a bad block, a missing or late BLUF, a `thesis:` or `confidence:` that differs from the BLUF, a `[n]` with no evidence row, a code anchor that is not `path@sha`, a system explainer without its anchor. **Fix every warning** you can: long sentences, hedges, passive voice, an untagged claim, a missing section, a page over its cap. Leave one only when you can say why it is right.
+Run `LINT` on the file. **Errors are blocking**: a bad block (an unknown `preset`, an undeclared `group`, an unknown `icon`), a missing or late BLUF, a `thesis:` or `confidence:` that differs from the BLUF, a `[n]` with no evidence row, a code anchor that is not `path@sha`, a system explainer without its anchor. **Fix every warning** you can: long sentences, hedges, passive voice, an untagged claim, a missing section, a page over its cap, a diagram with no preset, a preset's node cap or kinds, an unlabelled edge, mermaid where a native preset fits. Leave one only when you can say why it is right.
+
+`node ~/.claude/skills/explain/audit-diagrams.mjs <dir>` counts every diagram block under a folder and says which would warn, be drawn differently or migrate from mermaid. It only reads, so it is safe on the vault.
 
 Save event pages to `DIR/<YYYY-MM-DD>-<slug>.md`. If a file for the same slug exists today, append a `## Update @ HH:MM` section rather than a near-duplicate. A system explainer is always edited in place.
 
